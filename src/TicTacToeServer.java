@@ -15,7 +15,7 @@ import javax.swing.JFrame;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 
-public class TicTacToeServer extends JFrame{
+public class TicTacToeServer extends JFrame {
 	private JTextArea outputArea;
 	private ArrayList< Game > games;
 	private ArrayList< Player > players;
@@ -26,7 +26,7 @@ public class TicTacToeServer extends JFrame{
 	private ExecutorService runGame;
 	private Socket connection;
 	
-	public TicTacToeServer(){
+	public TicTacToeServer() {
 		super("Tic-Tac-Toe Server");
 		
 		runGame = Executors.newCachedThreadPool();
@@ -34,9 +34,9 @@ public class TicTacToeServer extends JFrame{
 		players = new ArrayList< Player >();
 		games = new ArrayList< Game >();
 		
-		try{
+		try {
 			server = new ServerSocket(12345,2);
-		}catch(IOException ioException){
+		} catch(IOException ioException) {
 			ioException.printStackTrace();
 			System.exit(1);
 		}
@@ -45,16 +45,14 @@ public class TicTacToeServer extends JFrame{
 		add(outputArea, BorderLayout.CENTER);
 		outputArea.setText("Server awaiting connections\n");
 		
-		setSize(300,300);
+		setSize(300, 300);
 		setVisible(true);
 	}
 	
-	public void execute(){
+	public void execute() {
 		try {
 			while (true) {
 				connection = server.accept();
-				System.out.println("Someone connected");
-				System.out.println(players.size());
 				players.add(players.size(), new Player(connection));
 				runGame.execute(players.get(players.size() - 1));
 			}
@@ -64,10 +62,10 @@ public class TicTacToeServer extends JFrame{
 		}
 	}
 	
-	private void displayMessage(final String messageToDisplay){
+	private void displayMessage(final String messageToDisplay) {
 		SwingUtilities.invokeLater(
-			new Runnable(){
-				public void run(){
+			new Runnable() {
+				public void run() {
 					outputArea.append(messageToDisplay);
 				}
 			}
@@ -87,15 +85,19 @@ public class TicTacToeServer extends JFrame{
 	
 	private class Game {
 		private int currentPlayer;
+		private boolean gameWon;
 		private ArrayList< Player > players;
 		private String name;
 		private String[] board;
 		private Condition otherPlayerConnected;
 		private Condition otherPlayerTurn;
 		private Lock gameLock;
+		private boolean gameOver;
 		
 		public Game(String name) {
 			this.name = name;
+			this.gameWon = false;
+			this.gameOver = false;
 			this.board = new String[9];
 			gameLock = new ReentrantLock();
 			currentPlayer = PLAYER_X;
@@ -103,7 +105,7 @@ public class TicTacToeServer extends JFrame{
 			otherPlayerConnected = gameLock.newCondition();
 			otherPlayerTurn = gameLock.newCondition();
 			
-			for(int i= 0;i<9;i++){
+			for (int i= 0;i<9;i++) {
 				board[i] = new String("");
 			}
 		}
@@ -112,27 +114,39 @@ public class TicTacToeServer extends JFrame{
 			return this.name;
 		}
 		
-		public boolean validateAndMove(int location, int player){
-			while(player != currentPlayer){
+		private boolean allSpotsFilled() {
+			for (int i = 0; i < board.length; i++) {
+				if (board[i].equals("")) {
+					return false;
+				}
+			}
+			return true;
+		}
+		
+		public boolean validateAndMove(int location, int player) {
+			while (player != currentPlayer) {
 				gameLock.lock();
-				try{
+				try {
 					otherPlayerTurn.await();
-				}catch(InterruptedException exception){
+				} catch(InterruptedException exception) {
 					exception.printStackTrace();
-				}finally{
+				} finally {
 					gameLock.unlock();
 				}
 			}
-			if(!isOccupied(location)){
+			if (!isOccupied(location)) {
 				board[location] = MARKS[currentPlayer];
+				if (calculateWin(MARKS[currentPlayer]) == true || allSpotsFilled()) {
+					this.gameOver = true;
+				}
+				
 				currentPlayer = (currentPlayer + 1) %2;
-				
+
 				this.players.get(currentPlayer).otherPlayerMoved(location);
-				
 				gameLock.lock();
-				try{
+				try {
 					otherPlayerTurn.signal();
-				}finally{
+				} finally {
 					gameLock.unlock();
 				}
 				return true;
@@ -141,10 +155,11 @@ public class TicTacToeServer extends JFrame{
 		}
 		
 		public boolean isOccupied(int location) {
-			if(board[location].equals(MARKS[PLAYER_X])||board[location].equals(MARKS[PLAYER_0])){
+			if (board[location].equals(MARKS[PLAYER_X]) || board[location].equals(MARKS[PLAYER_0])) {
 				return true;
-			}else
+			} else {
 				return false;
+			}
 		}
 		
 		public int getTotalPlayers() {
@@ -156,10 +171,10 @@ public class TicTacToeServer extends JFrame{
 			
 			if (this.players.size() == 2) {
 				gameLock.lock();
-				try{
+				try {
 					this.players.get(PLAYER_X).setSuspended(false);
 					otherPlayerConnected.signal();
-				}finally{
+				} finally {
 					gameLock.unlock();
 				}
 			}
@@ -189,7 +204,6 @@ public class TicTacToeServer extends JFrame{
 				}
 			}
 			if (match == 3) {
-				System.out.println("Dia Won");
 				return true;
 			}
 			
@@ -205,15 +219,12 @@ public class TicTacToeServer extends JFrame{
 				int max = i + 6;
 				for (int x = i; x <= max; x += 3) {
 					if (!playerMark.equals(board[x])) {
-						System.out.println(playerMark);
 						break;
 					} else {
-						System.out.println("FINALLY");
 						match++;
 					}
 				}
 				if (match == 3) {
-					System.out.println("Vertical Won");
 					return true;
 				}
 			}
@@ -221,6 +232,23 @@ public class TicTacToeServer extends JFrame{
 		}
 		
 		private boolean matchHorizontally(String playerMark) {
+			int match;
+			match = 0;
+			
+			for (int i = 0; i <= 6; i += 3) {
+				match = 0;
+				int max = i + 3;
+				for (int x = i; x < max; x++) {
+					if (!playerMark.equals(board[x])) {
+						break;
+					} else {
+						match++;
+					}
+				}
+				if (match == 3) {
+					return true;
+				}
+			}
 			return false;
 		}
 		
@@ -231,12 +259,23 @@ public class TicTacToeServer extends JFrame{
 			return false;
 		}
 		
-		public boolean isGameOver(){
-			return false;
+		public boolean isGameOver() {
+			return this.gameOver;
+		}
+		
+		public void setGameWon(boolean won) {
+			this.gameWon = won;
+		}
+		
+		public void setGameOver(boolean gameOver) {
+			this.gameOver = gameOver;
+		}
+		public boolean isGameWon() {
+			return this.gameWon;
 		}
 	}
 	
-	private class Player implements Runnable{
+	private class Player implements Runnable {
 		private Socket connection;
 		private Scanner input;
 		private Formatter output;
@@ -245,13 +284,15 @@ public class TicTacToeServer extends JFrame{
 		private String mark;
 		private boolean suspended = true;
 		private Game game;
+		private boolean winner;
 		
 		public Player(Socket socket) {
 			connection = socket;
-			try{
+			winner = false;
+			try {
 				input = new Scanner(connection.getInputStream());
 				output = new Formatter(connection.getOutputStream());
-			}catch(IOException ioException){
+			} catch(IOException ioException) {
 				ioException.printStackTrace();
 				System.exit(1);
 			}
@@ -260,6 +301,9 @@ public class TicTacToeServer extends JFrame{
 		public void otherPlayerMoved(int location) {
 			output.format("Opponent moved\n");
 			output.format("%d\n", location);
+			output.flush();
+			
+			output.format("%b\n", game.isGameOver());
 			output.flush();
 		}
 		
@@ -291,26 +335,24 @@ public class TicTacToeServer extends JFrame{
 					output.format("%s\n",mark);
 					output.flush();
 					
-					if(mark == "X"){
+					if (mark == "X") {
 						output.format("%s\n%s", "Player X connected","Waiting for another player\n");
 						output.flush();
 						
 						game.gameLock.lock();
-						System.out.println("Stuck in limbo");
-						try{
-							while(suspended){
-								System.out.println("Stuck in limbo");
+						try {
+							while (suspended) {
 								game.otherPlayerConnected.await();
 							}
-						}catch(InterruptedException exception){
+						} catch(InterruptedException exception) {
 							exception.printStackTrace();
-						}finally{
+						} finally {
 							game.gameLock.unlock();
 						}
 						
 						output.format("Other player connected. Your move.\n");
 						output.flush();
-					}else{
+					} else {
 						output.format("Player 0 connected, please wait\n");
 						output.flush();
 					}
@@ -320,25 +362,37 @@ public class TicTacToeServer extends JFrame{
 						if (input.hasNext()) {
 							location = input.nextInt();
 						}
+						if (game.isGameWon()) {
+							
+						}
 						if (game.validateAndMove(location, playerNumber)) {
 							displayMessage("\nlocation: "+ location);
 							output.format("Valid move.\n");
 							output.flush();
 							
 							if (game.calculateWin(MARKS[playerNumber])) {
-								output.format("You won!.\n");
+								output.format("You won!\n");
 								output.flush();
+								game.setGameWon(true);
+								winner = true;
+								game.setGameOver(true);
 							}
 						} else {
 							output.format("Invalid move, try again\n");
 							output.flush();
 						}
 					}
+					output.format("Game is Over");
+					output.flush();
+					if (game.isGameWon() && !winner) {
+						output.format("You lose!\n");
+						output.flush();
+					}
 				} else {
 					output.format("%s\n", "Occupied\n");
 					output.flush();
 				}
-			}finally{
+			} finally {
 				try {
 					connection.close();
 				} catch(IOException ioException) {
@@ -347,6 +401,7 @@ public class TicTacToeServer extends JFrame{
 				}
 			}
 		}
+		
 		public void setSuspended(boolean status){
 			suspended = status;
 		}
